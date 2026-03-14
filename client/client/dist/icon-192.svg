@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="38" fill="#12100c"/>
+  <path d="M36 122c19-28 39-42 61-42 23 0 42 14 59 42" fill="none" stroke="#f0c38b" stroke-width="12" stroke-linecap="round"/>
+  <text x="96" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#f7efe3">NWT</text>
+</svg>
