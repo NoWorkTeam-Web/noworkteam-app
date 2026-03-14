@@ -58,3 +58,18 @@ No necesita ninguna para la prueba inicial.
 
 ## Nota importante
 En Render, los archivos subidos y el JSON local funcionan bien para pruebas, pero no son la opción ideal para producción permanente. Para una versión final conviene mover productos e imágenes a una base de datos y a un almacenamiento externo.
+
+
+## Editor visual de diseño
+
+La app incluye un botón **Diseño** desde el que puedes cambiar sin tocar código:
+
+- nombre de marca y tagline
+- texto principal de portada
+- colores principales
+- fondo y color de tarjetas
+- logo
+- imagen principal de portada
+- mensaje promocional
+
+Los cambios se guardan en `server/data/settings.json`.

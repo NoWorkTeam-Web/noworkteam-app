@@ -11,9 +11,32 @@ const rootDir = path.join(__dirname, '..')
 const projectRoot = path.join(rootDir, '..')
 const clientDistDir = path.join(projectRoot, 'client', 'dist')
 const dataPath = path.join(rootDir, 'data', 'products.json')
+const settingsPath = path.join(rootDir, 'data', 'settings.json')
 const uploadsDir = path.join(rootDir, 'uploads')
 
+const defaultSettings = {
+  brandName: 'NO WORK TEAM',
+  tagline: 'Surfing Brand',
+  sinceText: 'Desde 1986',
+  heroTitle: 'La tienda de NO WORK TEAM en formato app.',
+  heroText: 'Mantiene el tono visual de la marca, el mensaje surf lifestyle y un catálogo editable desde panel admin con subida directa de fotos.',
+  primaryColor: '#f0c38b',
+  secondaryColor: '#bf7a37',
+  backgroundColor: '#0c0b09',
+  cardColor: '#171411',
+  textColor: '#f7efe6',
+  logoUrl: '',
+  heroImage: '',
+  promoText: 'Envíos a Canarias y Península · compra segura · marca surfera desde 1986'
+}
+
 await fs.mkdir(uploadsDir, { recursive: true })
+
+try {
+  await fs.access(settingsPath)
+} catch {
+  await fs.writeFile(settingsPath, JSON.stringify(defaultSettings, null, 2))
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -33,7 +56,7 @@ const PORT = process.env.PORT || 4000
 const isProduction = process.env.NODE_ENV === 'production'
 
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '12mb' }))
 app.use('/uploads', express.static(uploadsDir))
 
 async function readProducts() {
@@ -43,6 +66,15 @@ async function readProducts() {
 
 async function writeProducts(products) {
   await fs.writeFile(dataPath, JSON.stringify(products, null, 2))
+}
+
+async function readSettings() {
+  const raw = await fs.readFile(settingsPath, 'utf8')
+  return { ...defaultSettings, ...JSON.parse(raw) }
+}
+
+async function writeSettings(settings) {
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2))
 }
 
 function normalizeProduct(req, current = {}) {
@@ -63,11 +95,43 @@ function normalizeProduct(req, current = {}) {
   }
 }
 
+function normalizeSettings(body = {}) {
+  return {
+    brandName: String(body.brandName || defaultSettings.brandName).trim(),
+    tagline: String(body.tagline || defaultSettings.tagline).trim(),
+    sinceText: String(body.sinceText || defaultSettings.sinceText).trim(),
+    heroTitle: String(body.heroTitle || defaultSettings.heroTitle).trim(),
+    heroText: String(body.heroText || defaultSettings.heroText).trim(),
+    primaryColor: String(body.primaryColor || defaultSettings.primaryColor).trim(),
+    secondaryColor: String(body.secondaryColor || defaultSettings.secondaryColor).trim(),
+    backgroundColor: String(body.backgroundColor || defaultSettings.backgroundColor).trim(),
+    cardColor: String(body.cardColor || defaultSettings.cardColor).trim(),
+    textColor: String(body.textColor || defaultSettings.textColor).trim(),
+    logoUrl: String(body.logoUrl || '').trim(),
+    heroImage: String(body.heroImage || '').trim(),
+    promoText: String(body.promoText || defaultSettings.promoText).trim()
+  }
+}
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 app.get('/api/products', async (_req, res) => {
   const products = await readProducts()
   res.json(products.sort((a, b) => a.id - b.id))
+})
+
+app.get('/api/settings', async (_req, res) => {
+  const settings = await readSettings()
+  res.json(settings)
+})
+
+app.put('/api/settings', async (req, res) => {
+  const settings = normalizeSettings(req.body)
+  if (!settings.brandName || !settings.heroTitle) {
+    return res.status(400).json({ message: 'Completa al menos nombre de marca y título principal.' })
+  }
+  await writeSettings(settings)
+  res.json(settings)
 })
 
 app.post('/api/products', upload.single('file'), async (req, res) => {
