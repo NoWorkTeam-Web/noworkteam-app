@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 
 const currency = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
-const categories = ['Todos', 'Camisetas hombre', 'Camisetas mujer', 'Sudaderas unisex', 'Chaquetas', 'Gorras y sombreros', 'Lycras unisex', 'Niño/a']
+
+const categories = [
+  'Todos',
+  'Camisetas hombre',
+  'Camisetas mujer',
+  'Sudaderas unisex',
+  'Chaquetas',
+  'Gorras y sombreros',
+  'Lycras unisex',
+  'Niño/a'
+]
+
 const emptyForm = {
   id: null,
   name: '',
@@ -13,22 +24,27 @@ const emptyForm = {
   description: '',
   image: '',
   sizes: 'S, M, L, XL',
-  featured: false
+  featured: false,
+  originUrl: ''
 }
+
 const defaultSettings = {
   brandName: 'NO WORK TEAM',
   tagline: 'Surfing Brand',
   sinceText: 'Desde 1986',
-  heroTitle: 'La tienda de NO WORK TEAM en formato app.',
-  heroText: 'Mantiene el tono visual de la marca, el mensaje surf lifestyle y un catálogo editable desde panel admin con subida directa de fotos.',
-  primaryColor: '#f0c38b',
-  secondaryColor: '#bf7a37',
-  backgroundColor: '#0c0b09',
-  cardColor: '#171411',
-  textColor: '#f7efe6',
+  heroTitle: 'Una app más moderna para una marca con alma surf.',
+  heroText: 'Catálogo importado, checkout con Stripe test, editor visual y base lista para iPhone y Android con Capacitor.',
+  primaryColor: '#f2c182',
+  secondaryColor: '#ca7b3b',
+  backgroundColor: '#0b0d10',
+  cardColor: '#13171c',
+  textColor: '#f7f3ed',
   logoUrl: '',
-  heroImage: '',
-  promoText: 'Envíos a Canarias y Península · compra segura · marca surfera desde 1986'
+  heroImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80',
+  promoText: 'Envío Canarias gratis · Península 10€ · pagos con tarjeta en modo prueba',
+  announcement: 'Colección importada y preparada para crecer como app nativa.',
+  mobileAppText: 'Lista para instalar como PWA y empaquetar con Capacitor.',
+  instagramHandle: '@noworkteam'
 }
 
 function readFileAsDataURL(file) {
@@ -40,6 +56,11 @@ function readFileAsDataURL(file) {
   })
 }
 
+function formatSizes(value) {
+  if (Array.isArray(value)) return value
+  return String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
+}
+
 export default function App() {
   const [products, setProducts] = useState([])
   const [cart, setCart] = useState([])
@@ -49,12 +70,15 @@ export default function App() {
   const [designOpen, setDesignOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [settingsMessage, setSettingsMessage] = useState('')
+  const [checkoutMessage, setCheckoutMessage] = useState('')
   const [form, setForm] = useState(emptyForm)
   const [selectedFile, setSelectedFile] = useState(null)
   const [settings, setSettings] = useState(defaultSettings)
   const [settingsForm, setSettingsForm] = useState(defaultSettings)
+  const [selectedProduct, setSelectedProduct] = useState(null)
 
   useEffect(() => {
     fetchProducts()
@@ -83,7 +107,10 @@ export default function App() {
     setSettingsForm({ ...defaultSettings, ...data })
   }
 
-  const featuredProducts = useMemo(() => products.filter((item) => item.featured).slice(0, 4), [products])
+  const featuredProducts = useMemo(
+    () => products.filter((item) => item.featured).slice(0, 6),
+    [products]
+  )
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -97,6 +124,14 @@ export default function App() {
   const shipping = subtotal > 90 || subtotal === 0 ? 0 : 4.99
   const total = subtotal + shipping
 
+  const categoryCounts = useMemo(
+    () => categories.reduce((acc, item) => ({
+      ...acc,
+      [item]: item === 'Todos' ? products.length : products.filter((product) => product.category === item).length
+    }), {}),
+    [products]
+  )
+
   function addToCart(product) {
     setCart((current) => {
       const existing = current.find((item) => item.id === product.id)
@@ -106,7 +141,9 @@ export default function App() {
   }
 
   function updateQuantity(id, delta) {
-    setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item).filter((item) => item.quantity > 0))
+    setCart((current) => current
+      .map((item) => item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item)
+      .filter((item) => item.quantity > 0))
   }
 
   function openCreate() {
@@ -122,7 +159,7 @@ export default function App() {
       ...product,
       price: String(product.price),
       stock: String(product.stock),
-      sizes: Array.isArray(product.sizes) ? product.sizes.join(', ') : product.sizes || ''
+      sizes: formatSizes(product.sizes).join(', ')
     })
     setMessage('')
     setAdminOpen(true)
@@ -150,6 +187,7 @@ export default function App() {
     payload.append('image', form.image)
     payload.append('sizes', form.sizes)
     payload.append('featured', String(form.featured))
+    payload.append('originUrl', form.originUrl)
     if (selectedFile) payload.append('file', selectedFile)
 
     const method = form.id ? 'PUT' : 'POST'
@@ -214,123 +252,169 @@ export default function App() {
     }
   }
 
-  const installHint = 'En móvil, abre Safari y pulsa “Añadir a pantalla de inicio” para instalar la app.'
-  const heroImage = settings.heroImage || 'https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=1200&q=80'
+  async function handleCheckout() {
+    if (!cart.length) return
+    setCheckoutLoading(true)
+    setCheckoutMessage('')
+    try {
+      const res = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: cart })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCheckoutMessage(data.message || 'No se pudo iniciar el checkout.')
+      } else if (data.url) {
+        window.location.href = data.url
+      }
+    } catch {
+      setCheckoutMessage('Error de red al conectar con el checkout.')
+    }
+    setCheckoutLoading(false)
+  }
+
+  const bestPrice = products.reduce((acc, item) => Math.min(acc, item.price), products[0]?.price || 0)
+  const installHint = settings.mobileAppText || 'En móvil, abre Safari y pulsa “Añadir a pantalla de inicio” para instalar la app.'
+  const heroImage = settings.heroImage || defaultSettings.heroImage
   const logo = settings.logoUrl || ''
 
   return (
-    <div className="page">
-      <header className="hero">
-        <div className="topline">
-          <span>{settings.brandName}</span>
-          <span>{settings.tagline}</span>
-          <span>{settings.sinceText}</span>
-        </div>
-        <nav className="nav">
-          <div className="brand-wrap">
-            {logo ? <img src={logo} alt={settings.brandName} className="brand-logo" /> : null}
-            <div>
-              <p className="brand">{settings.brandName}</p>
-              <p className="brand-sub">{settings.tagline.toLowerCase()} · app móvil</p>
+    <div className="page-shell">
+      <div className="announcement">{settings.announcement}</div>
+      <div className="page">
+        <header className="hero surface-card">
+          <nav className="nav">
+            <div className="brand-wrap">
+              {logo ? <img className="brand-logo" src={logo} alt={settings.brandName} /> : <div className="brand-mark">NWT</div>}
+              <div>
+                <p className="brand-eyebrow">{settings.tagline}</p>
+                <h1 className="brand">{settings.brandName}</h1>
+                <p className="brand-sub">{settings.sinceText}</p>
+              </div>
             </div>
-          </div>
-          <div className="nav-actions">
-            <button className="ghost" onClick={() => document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' })}>Colección</button>
-            <button className="secondary" onClick={openDesignEditor}>Diseño</button>
-            <button className="primary" onClick={openCreate}>Admin</button>
-          </div>
-        </nav>
+            <div className="nav-actions">
+              <button className="ghost-button" onClick={openDesignEditor}>Diseño</button>
+              <button className="ghost-button" onClick={openCreate}>Admin</button>
+              <button className="cart-pill" onClick={() => document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth' })}>
+                Carrito <span>{cart.reduce((acc, item) => acc + item.quantity, 0)}</span>
+              </button>
+            </div>
+          </nav>
 
-        <section className="hero-grid">
-          <div>
-            <p className="eyebrow">Personalizable desde la app</p>
-            <h1>{settings.heroTitle}</h1>
-            <p className="hero-copy">{settings.heroText}</p>
-            <div className="hero-buttons row">
-              <button className="primary" onClick={() => document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' })}>Ver colección</button>
-              <button className="secondary" onClick={openDesignEditor}>Editar diseño</button>
-            </div>
-            <div className="metrics row">
-              <article><strong>{products.length}</strong><span>productos cargados</span></article>
-              <article><strong>Editor</strong><span>cambia colores, logo y portada</span></article>
-              <article><strong>PWA</strong><span>instalable en móvil</span></article>
-            </div>
-          </div>
-
-          <div className="hero-card">
-            <div className="hero-badge-row row">
-              <span className="pill">Diseños únicos</span>
-              <span className="pill muted">Personalizable</span>
-            </div>
-            <div className="hero-gallery custom-hero-gallery">
-              <div className="photo tall" style={{ backgroundImage: `linear-gradient(180deg, rgba(12,11,9,0.15), rgba(12,11,9,0.48)), url('${heroImage}')` }}></div>
-              <div className="stack">
-                <div className="promo-card surface-card">
-                  <p>{settings.tagline}</p>
-                  <strong>{settings.promoText}</strong>
-                  <span>{installHint}</span>
+          <div className="hero-grid">
+            <div className="hero-copy">
+              <p className="eyebrow">{settings.promoText}</p>
+              <h2>{settings.heroTitle}</h2>
+              <p>{settings.heroText}</p>
+              <div className="hero-actions">
+                <button className="primary-button" onClick={() => document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' })}>
+                  Ver catálogo
+                </button>
+                <button className="secondary-button" onClick={() => document.getElementById('mobile')?.scrollIntoView({ behavior: 'smooth' })}>
+                  App iPhone / Android
+                </button>
+              </div>
+              <div className="stats-grid">
+                <div>
+                  <strong>{products.length}</strong>
+                  <span>productos importados</span>
                 </div>
-                <div className="mini-card">
-                  <p>Portada editable</p>
-                  <strong>Sube tu imagen y cambia el mensaje principal</strong>
-                  <span>También puedes cambiar colores, logo y textos sin tocar código.</span>
+                <div>
+                  <strong>{featuredProducts.length}</strong>
+                  <span>destacados</span>
+                </div>
+                <div>
+                  <strong>{currency.format(bestPrice || 0)}</strong>
+                  <span>precio desde</span>
                 </div>
               </div>
             </div>
+            <div className="hero-media">
+              <img src={heroImage} alt="Portada NO WORK TEAM" />
+              <div className="hero-overlay surface-card">
+                <p>Stripe test activo</p>
+                <strong>Checkout preparado</strong>
+                <span>{installHint}</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section className="section surface-card compact-strip">
+          <div>
+            <p className="eyebrow">Selección</p>
+            <h3>Estilo más limpio, catálogo más amplio y base móvil lista para crecer.</h3>
+          </div>
+          <div className="strip-points">
+            <span>Importación inicial de tu catálogo</span>
+            <span>Fotos públicas de producto</span>
+            <span>Editor visual</span>
+            <span>Checkout de prueba</span>
           </div>
         </section>
-      </header>
 
-      <main className="layout">
-        <section className="content" id="catalogo">
-          <div className="section-head row-between">
+        <section className="section" id="catalogo">
+          <div className="section-head">
             <div>
-              <p className="eyebrow">Productos</p>
-              <h2>Catálogo editable</h2>
+              <p className="eyebrow">Colección</p>
+              <h3>Catálogo NWT</h3>
             </div>
-            <p className="muted">Ahora también puedes personalizar la portada, los colores y el branding desde el panel de diseño.</p>
+            <div className="search-wrap">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Busca por nombre, badge o descripción"
+              />
+            </div>
           </div>
 
-          <div className="featured-grid">
+          <div className="category-row">
+            {categories.map((item) => (
+              <button
+                key={item}
+                className={`category-chip ${item === category ? 'active' : ''}`}
+                onClick={() => setCategory(item)}
+              >
+                {item} <span>{categoryCounts[item] || 0}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="featured-scroll">
             {featuredProducts.map((product) => (
-              <article className="featured-card surface-card" key={`featured-${product.id}`}>
+              <article key={product.id} className="featured-card surface-card">
                 <img src={product.image} alt={product.name} />
                 <div>
-                  <span className="small">{product.subtitle}</span>
-                  <h3>{product.name}</h3>
+                  <p className="eyebrow">{product.badge}</p>
+                  <h4>{product.name}</h4>
                   <p>{currency.format(product.price)}</p>
                 </div>
+                <button className="link-button" onClick={() => setSelectedProduct(product)}>Ver ficha</button>
               </article>
             ))}
           </div>
 
-          <div className="filters row">
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar diseño, colección o badge" />
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {categories.map((item) => <option key={item}>{item}</option>)}
-            </select>
-          </div>
-
-          <div className="product-grid">
+          <div className="catalog-grid">
             {filteredProducts.map((product) => (
-              <article className="product-card surface-card" key={product.id}>
-                <div className="product-image-wrap">
+              <article key={product.id} className="product-card surface-card">
+                <div className="product-image-wrap" onClick={() => setSelectedProduct(product)}>
                   <img src={product.image} alt={product.name} />
-                  <span className="pill product-pill">{product.badge}</span>
+                  <span className="badge">{product.badge}</span>
                 </div>
-                <div className="product-body">
-                  <p className="small">{product.subtitle}</p>
-                  <h3>{product.name}</h3>
+                <div className="product-info">
+                  <p className="muted">{product.subtitle}</p>
+                  <h4>{product.name}</h4>
                   <p className="description">{product.description}</p>
-                  <div className="meta-row row-between">
-                    <span>{currency.format(product.price)}</span>
-                    <span>Stock {product.stock}</span>
+                </div>
+                <div className="product-footer">
+                  <div>
+                    <strong>{currency.format(product.price)}</strong>
+                    <span>Stock: {product.stock}</span>
                   </div>
-                  <p className="sizes">Tallas: {Array.isArray(product.sizes) ? product.sizes.join(', ') : product.sizes}</p>
-                  <div className="card-actions row">
-                    <button className="secondary" onClick={() => addToCart(product)}>Añadir</button>
-                    <button className="ghost" onClick={() => openEdit(product)}>Editar</button>
-                    <button className="ghost danger" onClick={() => handleDelete(product.id)}>Borrar</button>
+                  <div className="card-actions">
+                    <button className="ghost-button small" onClick={() => openEdit(product)}>Editar</button>
+                    <button className="primary-button small" onClick={() => addToCart(product)}>Añadir</button>
                   </div>
                 </div>
               </article>
@@ -338,120 +422,172 @@ export default function App() {
           </div>
         </section>
 
-        <aside className="sidebar">
-          <section className="cart-card surface-card">
-            <div className="section-head compact">
+        <section className="section story-grid">
+          <article className="surface-card story-card">
+            <p className="eyebrow">Checkout</p>
+            <h3>Pagos con tarjeta en modo prueba</h3>
+            <p>La app ya trae el endpoint de Stripe test para redirigir a Checkout. Solo tienes que añadir las claves de prueba en el servidor para activarlo.</p>
+            <ul>
+              <li>STRIPE_SECRET_KEY</li>
+              <li>PUBLIC_BASE_URL</li>
+            </ul>
+          </article>
+          <article className="surface-card story-card" id="mobile">
+            <p className="eyebrow">Mobile</p>
+            <h3>Lista para iPhone y Android</h3>
+            <p>Se incluye configuración base de Capacitor para empaquetar esta misma app como aplicación nativa cuando quieras dar el siguiente paso.</p>
+            <ul>
+              <li>ios / android vía Capacitor</li>
+              <li>misma base React</li>
+              <li>PWA instalable desde Safari y Chrome</li>
+            </ul>
+          </article>
+        </section>
+
+        <section className="section checkout-grid">
+          <article id="cart" className="surface-card cart-card">
+            <div className="section-head">
               <div>
                 <p className="eyebrow">Carrito</p>
-                <h2>Resumen</h2>
+                <h3>Tu selección</h3>
               </div>
+              <span className="muted">{cart.length} líneas</span>
             </div>
-            {cart.length === 0 ? <p className="muted">Aún no hay productos en la cesta.</p> : null}
-            <div className="cart-items">
-              {cart.map((item) => (
-                <article className="cart-item" key={item.id}>
-                  <img src={item.image} alt={item.name} />
-                  <div>
-                    <strong>{item.name}</strong>
-                    <p>{currency.format(item.price)}</p>
-                    <div className="qty-row row">
+            {cart.length === 0 ? (
+              <p className="empty-state">Todavía no has añadido productos.</p>
+            ) : (
+              <div className="cart-list">
+                {cart.map((item) => (
+                  <div key={item.id} className="cart-row">
+                    <img src={item.image} alt={item.name} />
+                    <div className="cart-copy">
+                      <strong>{item.name}</strong>
+                      <span>{currency.format(item.price)}</span>
+                    </div>
+                    <div className="qty-row">
                       <button onClick={() => updateQuantity(item.id, -1)}>-</button>
                       <span>{item.quantity}</span>
                       <button onClick={() => updateQuantity(item.id, 1)}>+</button>
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
-            <div className="summary">
-              <div className="row-between"><span>Subtotal</span><strong>{currency.format(subtotal)}</strong></div>
-              <div className="row-between"><span>Envío</span><strong>{shipping === 0 ? 'Gratis' : currency.format(shipping)}</strong></div>
-              <div className="row-between total"><span>Total</span><strong>{currency.format(total)}</strong></div>
-            </div>
-            <button className="primary full">Finalizar pedido</button>
-          </section>
+                ))}
+              </div>
+            )}
+          </article>
 
-          <section className="admin-note surface-card">
-            <p className="eyebrow">Paneles</p>
-            <h3>Ahora puedes gestionar diseño y catálogo</h3>
-            <ul>
-              <li>Productos con imagen, stock y destacados</li>
-              <li>Color principal, fondos y textos</li>
-              <li>Logo, portada y mensajes de marca</li>
-            </ul>
-          </section>
-        </aside>
-      </main>
+          <aside className="surface-card summary-card">
+            <p className="eyebrow">Resumen</p>
+            <h3>Total</h3>
+            <div className="summary-row"><span>Subtotal</span><strong>{currency.format(subtotal)}</strong></div>
+            <div className="summary-row"><span>Envío</span><strong>{currency.format(shipping)}</strong></div>
+            <div className="summary-row total"><span>Total</span><strong>{currency.format(total)}</strong></div>
+            <button className="primary-button wide" disabled={!cart.length || checkoutLoading} onClick={handleCheckout}>
+              {checkoutLoading ? 'Conectando…' : 'Pagar con tarjeta'}
+            </button>
+            {checkoutMessage && <p className="notice">{checkoutMessage}</p>}
+            <p className="muted small">Usa este checkout en modo prueba con tu clave secreta de Stripe test.</p>
+          </aside>
+        </section>
+      </div>
 
-      {adminOpen ? (
+      {selectedProduct && (
+        <div className="modal-backdrop" onClick={() => setSelectedProduct(null)}>
+          <div className="modal product-modal surface-card" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedProduct(null)}>×</button>
+            <div className="product-modal-grid">
+              <img src={selectedProduct.image} alt={selectedProduct.name} />
+              <div>
+                <p className="eyebrow">{selectedProduct.subtitle}</p>
+                <h3>{selectedProduct.name}</h3>
+                <p>{selectedProduct.description}</p>
+                <div className="product-meta">
+                  <span>{currency.format(selectedProduct.price)}</span>
+                  <span>{selectedProduct.category}</span>
+                  <span>Tallas: {formatSizes(selectedProduct.sizes).join(', ')}</span>
+                </div>
+                <div className="hero-actions">
+                  <button className="primary-button" onClick={() => addToCart(selectedProduct)}>Añadir al carrito</button>
+                  {selectedProduct.originUrl ? <a className="ghost-button as-link" href={selectedProduct.originUrl} target="_blank" rel="noreferrer">Ver origen</a> : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {adminOpen && (
         <div className="modal-backdrop" onClick={() => setAdminOpen(false)}>
-          <div className="modal surface-card" onClick={(e) => e.stopPropagation()}>
-            <div className="section-head row-between compact">
-              <div>
-                <p className="eyebrow">Admin</p>
-                <h2>{form.id ? 'Editar producto' : 'Nuevo producto'}</h2>
-              </div>
-              <button className="ghost" onClick={() => setAdminOpen(false)}>Cerrar</button>
+          <div className="modal surface-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h3>{form.id ? 'Editar producto' : 'Nuevo producto'}</h3>
+              <button className="modal-close" onClick={() => setAdminOpen(false)}>×</button>
             </div>
-            <form className="admin-form" onSubmit={handleSubmit}>
-              <label>Nombre<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
-              <label>Categoría<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.slice(1).map((item) => <option key={item}>{item}</option>)}</select></label>
-              <label>Precio<input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required /></label>
-              <label>Stock<input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} required /></label>
-              <label>Badge<input value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} /></label>
-              <label>Subtítulo<input value={form.subtitle} onChange={(e) => setForm({ ...form, subtitle: e.target.value })} /></label>
-              <label className="full-width">Descripción<textarea rows="4" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required /></label>
-              <label>URL imagen<input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} placeholder="https://..." /></label>
-              <label>Subir imagen<input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} /></label>
-              <label>Tallas<input value={form.sizes} onChange={(e) => setForm({ ...form, sizes: e.target.value })} /></label>
-              <label className="checkbox-row"><input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} /> Destacar en portada</label>
-              {message ? <p className="muted full-width">{message}</p> : null}
-              <div className="row full-width form-actions">
-                <button type="button" className="ghost" onClick={() => setAdminOpen(false)}>Cancelar</button>
-                <button type="submit" className="primary">{saving ? 'Guardando...' : 'Guardar producto'}</button>
+            <form className="form-grid" onSubmit={handleSubmit}>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre" required />
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {categories.filter((item) => item !== 'Todos').map((item) => <option key={item}>{item}</option>)}
+              </select>
+              <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Precio" required />
+              <input value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} placeholder="Stock" required />
+              <input value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} placeholder="Badge" />
+              <input value={form.subtitle} onChange={(e) => setForm({ ...form, subtitle: e.target.value })} placeholder="Subtitle" />
+              <input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} placeholder="URL de imagen" />
+              <input value={form.originUrl || ''} onChange={(e) => setForm({ ...form, originUrl: e.target.value })} placeholder="URL de origen" />
+              <input value={form.sizes} onChange={(e) => setForm({ ...form, sizes: e.target.value })} placeholder="Tallas separadas por coma" />
+              <label className="file-input">
+                Subir imagen
+                <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+              </label>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
+                Destacado
+              </label>
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descripción" rows="4" required />
+              <div className="form-actions">
+                {form.id ? <button type="button" className="danger-button" onClick={() => handleDelete(form.id)}>Eliminar</button> : <span />}
+                <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Guardando…' : 'Guardar producto'}</button>
               </div>
+              {message && <p className="notice">{message}</p>}
             </form>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {designOpen ? (
+      {designOpen && (
         <div className="modal-backdrop" onClick={() => setDesignOpen(false)}>
-          <div className="modal surface-card" onClick={(e) => e.stopPropagation()}>
-            <div className="section-head row-between compact">
-              <div>
-                <p className="eyebrow">Diseño</p>
-                <h2>Editor visual de la app</h2>
-              </div>
-              <button className="ghost" onClick={() => setDesignOpen(false)}>Cerrar</button>
+          <div className="modal surface-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h3>Editor visual</h3>
+              <button className="modal-close" onClick={() => setDesignOpen(false)}>×</button>
             </div>
-            <form className="admin-form" onSubmit={handleSaveSettings}>
-              <label>Nombre de marca<input value={settingsForm.brandName} onChange={(e) => setSettingsForm({ ...settingsForm, brandName: e.target.value })} /></label>
-              <label>Tagline<input value={settingsForm.tagline} onChange={(e) => setSettingsForm({ ...settingsForm, tagline: e.target.value })} /></label>
-              <label>Texto “Desde”<input value={settingsForm.sinceText} onChange={(e) => setSettingsForm({ ...settingsForm, sinceText: e.target.value })} /></label>
-              <label>Texto promo<input value={settingsForm.promoText} onChange={(e) => setSettingsForm({ ...settingsForm, promoText: e.target.value })} /></label>
-              <label className="full-width">Título portada<input value={settingsForm.heroTitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroTitle: e.target.value })} /></label>
-              <label className="full-width">Texto portada<textarea rows="4" value={settingsForm.heroText} onChange={(e) => setSettingsForm({ ...settingsForm, heroText: e.target.value })} /></label>
-              <label>Color principal<input type="color" value={settingsForm.primaryColor} onChange={(e) => setSettingsForm({ ...settingsForm, primaryColor: e.target.value })} /></label>
-              <label>Color secundario<input type="color" value={settingsForm.secondaryColor} onChange={(e) => setSettingsForm({ ...settingsForm, secondaryColor: e.target.value })} /></label>
-              <label>Fondo<input type="color" value={settingsForm.backgroundColor} onChange={(e) => setSettingsForm({ ...settingsForm, backgroundColor: e.target.value })} /></label>
-              <label>Tarjetas<input type="color" value={settingsForm.cardColor} onChange={(e) => setSettingsForm({ ...settingsForm, cardColor: e.target.value })} /></label>
-              <label>Texto<input type="color" value={settingsForm.textColor} onChange={(e) => setSettingsForm({ ...settingsForm, textColor: e.target.value })} /></label>
-              <label>URL del logo<input value={settingsForm.logoUrl} onChange={(e) => setSettingsForm({ ...settingsForm, logoUrl: e.target.value })} placeholder="https://..." /></label>
-              <label className="full-width">URL imagen portada<input value={settingsForm.heroImage} onChange={(e) => setSettingsForm({ ...settingsForm, heroImage: e.target.value })} placeholder="https://..." /></label>
-              <label>Subir logo<input type="file" name="logoFile" accept="image/*" /></label>
-              <label>Subir imagen portada<input type="file" name="heroImageFile" accept="image/*" /></label>
-              {settingsMessage ? <p className="muted full-width">{settingsMessage}</p> : null}
-              <div className="row full-width form-actions">
-                <button type="button" className="ghost" onClick={() => {
-                  setSettingsForm(defaultSettings)
-                }}>Restaurar base</button>
-                <button type="submit" className="primary">{settingsSaving ? 'Guardando...' : 'Guardar diseño'}</button>
+            <form className="form-grid" onSubmit={handleSaveSettings}>
+              <input value={settingsForm.brandName} onChange={(e) => setSettingsForm({ ...settingsForm, brandName: e.target.value })} placeholder="Marca" />
+              <input value={settingsForm.tagline} onChange={(e) => setSettingsForm({ ...settingsForm, tagline: e.target.value })} placeholder="Tagline" />
+              <input value={settingsForm.sinceText} onChange={(e) => setSettingsForm({ ...settingsForm, sinceText: e.target.value })} placeholder="Desde" />
+              <input value={settingsForm.primaryColor} onChange={(e) => setSettingsForm({ ...settingsForm, primaryColor: e.target.value })} placeholder="#color primario" />
+              <input value={settingsForm.secondaryColor} onChange={(e) => setSettingsForm({ ...settingsForm, secondaryColor: e.target.value })} placeholder="#color secundario" />
+              <input value={settingsForm.backgroundColor} onChange={(e) => setSettingsForm({ ...settingsForm, backgroundColor: e.target.value })} placeholder="#fondo" />
+              <input value={settingsForm.cardColor} onChange={(e) => setSettingsForm({ ...settingsForm, cardColor: e.target.value })} placeholder="#tarjeta" />
+              <input value={settingsForm.textColor} onChange={(e) => setSettingsForm({ ...settingsForm, textColor: e.target.value })} placeholder="#texto" />
+              <input value={settingsForm.heroImage} onChange={(e) => setSettingsForm({ ...settingsForm, heroImage: e.target.value })} placeholder="URL imagen principal" />
+              <input value={settingsForm.logoUrl} onChange={(e) => setSettingsForm({ ...settingsForm, logoUrl: e.target.value })} placeholder="URL logo" />
+              <input value={settingsForm.promoText} onChange={(e) => setSettingsForm({ ...settingsForm, promoText: e.target.value })} placeholder="Texto promo" />
+              <input value={settingsForm.announcement || ''} onChange={(e) => setSettingsForm({ ...settingsForm, announcement: e.target.value })} placeholder="Announcement" />
+              <input value={settingsForm.mobileAppText || ''} onChange={(e) => setSettingsForm({ ...settingsForm, mobileAppText: e.target.value })} placeholder="Texto mobile" />
+              <input value={settingsForm.instagramHandle || ''} onChange={(e) => setSettingsForm({ ...settingsForm, instagramHandle: e.target.value })} placeholder="Instagram" />
+              <label className="file-input">Subir hero image<input name="heroImageFile" type="file" accept="image/*" /></label>
+              <label className="file-input">Subir logo<input name="logoFile" type="file" accept="image/*" /></label>
+              <textarea value={settingsForm.heroTitle} onChange={(e) => setSettingsForm({ ...settingsForm, heroTitle: e.target.value })} placeholder="Título hero" rows="2" />
+              <textarea value={settingsForm.heroText} onChange={(e) => setSettingsForm({ ...settingsForm, heroText: e.target.value })} placeholder="Texto hero" rows="3" />
+              <div className="form-actions">
+                <span />
+                <button className="primary-button" type="submit" disabled={settingsSaving}>{settingsSaving ? 'Guardando…' : 'Guardar diseño'}</button>
               </div>
+              {settingsMessage && <p className="notice">{settingsMessage}</p>}
             </form>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   )
 }
