@@ -1,75 +1,74 @@
-# NO WORK TEAM · App lista para Render
+# NO WORK TEAM · app moderna + Stripe test + base móvil
 
-Esta versión está preparada para desplegarse en **Render** con un único servicio web.
+Esta versión incluye:
 
-## Qué incluye
-- Frontend React + Vite
-- Backend Express
-- Panel admin con crear, editar y borrar productos
-- Subida de imágenes
-- PWA instalable en iPhone
-- Catálogo inicial inspirado en noworkteam.es
+- catálogo importado desde páginas públicas de noworkteam.es
+- varias fotos reales de producto enlazadas desde la web pública
+- editor visual dentro de la app
+- panel admin para crear / editar / borrar productos
+- checkout con Stripe en modo prueba
+- PWA instalable
+- configuración base de Capacitor para iPhone y Android
 
-## Probar en local
+## Desarrollo
 
 ```bash
 npm install
 npm run dev
 ```
 
-Frontend: `http://localhost:5173`
+## Producción / Render
 
-## Desplegar en Render
-
-### Opción rápida
-1. Sube esta carpeta a un repositorio de GitHub.
-2. En Render crea un **Web Service**.
-3. Conecta tu repositorio.
-4. Usa esta configuración:
-
-**Build Command**
 ```bash
-npm install && npm run build
-```
-
-**Start Command**
-```bash
+npm install
+npm run build
 npm start
 ```
 
-### Variables de entorno
-No necesita ninguna para la prueba inicial.
+En Render:
 
-### Qué hace en producción
-- Render ejecuta `npm run build` y genera `client/dist`
-- Express sirve la API en `/api`
-- Express también sirve el frontend compilado y los archivos de `/uploads`
+- Build Command: `npm install && npm run build`
+- Start Command: `npm start`
 
-## Instalarla en iPhone
-1. Abre la URL pública de Render en Safari.
-2. Pulsa **Compartir**.
-3. Pulsa **Añadir a pantalla de inicio**.
+## Variables de entorno para Stripe test
 
-## Estructura
-- `client/` → frontend
-- `server/` → backend
-- `server/data/products.json` → productos
-- `server/uploads/` → imágenes subidas desde admin
+Crea estas variables en Render o en tu entorno local:
 
-## Nota importante
-En Render, los archivos subidos y el JSON local funcionan bien para pruebas, pero no son la opción ideal para producción permanente. Para una versión final conviene mover productos e imágenes a una base de datos y a un almacenamiento externo.
+```bash
+STRIPE_SECRET_KEY=sk_test_xxx
+PUBLIC_BASE_URL=https://tu-app.onrender.com
+```
 
+Si `STRIPE_SECRET_KEY` no existe, el botón de pagar mostrará un mensaje indicando que falta activar Stripe test.
 
-## Editor visual de diseño
+## App iPhone / Android con Capacitor
 
-La app incluye un botón **Diseño** desde el que puedes cambiar sin tocar código:
+Instala dependencias:
 
-- nombre de marca y tagline
-- texto principal de portada
-- colores principales
-- fondo y color de tarjetas
-- logo
-- imagen principal de portada
-- mensaje promocional
+```bash
+npm install
+```
 
-Los cambios se guardan en `server/data/settings.json`.
+Sincroniza web + móvil:
+
+```bash
+npm run mobile:build
+```
+
+Abrir iOS:
+
+```bash
+npm run mobile:ios
+```
+
+Abrir Android:
+
+```bash
+npm run mobile:android
+```
+
+> Para publicar en App Store / Google Play necesitarás tus cuentas de desarrollador, certificados y firma final de la app.
+
+## Notas sobre la importación
+
+La importación incluida es una base inicial preparada a partir de contenido público verificable. Para una sincronización completa y fiable de todo el catálogo, lo ideal es conectar CSV, base de datos o API propia.
