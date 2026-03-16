@@ -72,3 +72,5 @@ npm run mobile:android
 ## Notas sobre la importación
 
 La importación incluida es una base inicial preparada a partir de contenido público verificable. Para una sincronización completa y fiable de todo el catálogo, lo ideal es conectar CSV, base de datos o API propia.
+
+deploy update
