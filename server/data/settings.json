@@ -1,0 +1,18 @@
+{
+  "brandName": "NO WORK TEAM",
+  "tagline": "Surfing Brand",
+  "sinceText": "Desde 1986",
+  "heroTitle": "Una app más moderna, limpia y lista para escalar.",
+  "heroText": "Catálogo importado desde tu web pública, fichas con imágenes reales de producto, checkout con Stripe test y base preparada para PWA + Capacitor.",
+  "primaryColor": "#f2c182",
+  "secondaryColor": "#ca7b3b",
+  "backgroundColor": "#0b0d10",
+  "cardColor": "#13171c",
+  "textColor": "#f7f3ed",
+  "logoUrl": "",
+  "heroImage": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80",
+  "promoText": "Envío Canarias gratis · Península 10€ · Stripe test preparado",
+  "announcement": "NO WORK TEAM app beta: catálogo ampliado + checkout de prueba + base móvil.",
+  "mobileAppText": "Instalable como PWA y lista para empaquetar con Capacitor en iPhone y Android.",
+  "instagramHandle": "@noworkteam"
+}
